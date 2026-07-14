@@ -102,7 +102,7 @@ async def process_address(request: Request):
         property.blob.save(pdf_names[0], File(handle), save=False)
 
     # 3_deed_reader: extract structured data from the downloaded deed PDF
-    content = await read_deed(pdf_path)
+    content = await read_deed(pdf_path, [address])
     property.content = content
     await property.asave()
 

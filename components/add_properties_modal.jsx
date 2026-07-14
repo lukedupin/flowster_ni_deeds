@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useState } from 'react'
+import React, { Fragment, useEffect, useRef, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Spinner } from "../../src/components/spinner"
@@ -13,6 +13,8 @@ export const AddPropertiesModal = props => {
 
     const [text, setText] = useState('')
     const [sanitizing, setSanitizing] = useState(false)
+
+    const textareaRef = useRef(null)
 
     useEffect(() => {
         if ( !open ) {
@@ -47,7 +49,7 @@ export const AddPropertiesModal = props => {
 
     return (
         <Transition.Root show={open} as={Fragment}>
-            <Dialog as="div" className="relative z-40" onClose={onClose}>
+            <Dialog as="div" className="relative z-40" onClose={onClose} initialFocus={textareaRef}>
                 <Transition.Child
                     as={Fragment}
                     enter="ease-out duration-300"
@@ -96,6 +98,7 @@ export const AddPropertiesModal = props => {
                                         </p>
                                         <div className="mt-3 w-full">
                                             <textarea
+                                                ref={textareaRef}
                                                 rows={10}
                                                 disabled={sanitizing}
                                                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"

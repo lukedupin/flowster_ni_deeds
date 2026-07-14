@@ -54,6 +54,8 @@ async def lookup(address: str) -> str:
         return await get_data(client, address, cookie_str)
 
 async def resolve_owner_name(address: str) -> str | None:
+    address = address.replace(' ', '%20')
+
     result = await lookup(address)
     result_js = json.loads(result)
     if len(result_js['items']) == 0:
