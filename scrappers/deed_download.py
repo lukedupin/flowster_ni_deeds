@@ -97,7 +97,7 @@ async def find_pdf_urls(page, name: str) -> list[str]:
     await page.goto(url)
     await page.wait_for_load_state("networkidle")
 
-    print("Checking deed type and entering name...")
+    print(f"Checking deed type and entering name... {name}")
     await page.check("#cphNoMargin_f_dclDocType_9")
     await page.fill("#cphNoMargin_f_txtParty", name)
     async with page.expect_navigation(wait_until="networkidle"):

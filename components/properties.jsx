@@ -3,6 +3,7 @@ import { DocumentTextIcon } from "@heroicons/react/24/outline"
 import * as Util from "../../src/helpers/util.js"
 import { WEB_URL } from "../../src/settings"
 import { Sortable } from "../../src/components/sortable.jsx"
+import { PropertyDetailModal } from "./property_detail_modal.jsx"
 
 const COLUMNS = [
     { key: 'found_name', label: 'Owner Name' },
@@ -23,10 +24,27 @@ const sortValue = (property, key) => {
     }
 }
 
+const searchValue = (property, key) => {
+    if ( key === 'timestamp_on' ) {
+        return property.timestamp_on ? new Date(property.timestamp_on).toLocaleDateString() : ''
+    }
+    return sortValue(property, key)
+}
+
+const matchesSearch = (property, search) => {
+    const search_lower = Util.xstr(search).trim().toLowerCase()
+    if ( !search_lower ) {
+        return true
+    }
+
+    return COLUMNS.some(col => Util.xstr(searchValue(property, col.key)).toLowerCase().includes(search_lower))
+}
+
 export const Properties = React.forwardRef((props, ref) => {
     const {search, showToast } = props
     const [properties, setProperties] = useState([])
     const [sort, setSort] = useState({ key: 'initial_address', asc: true })
+    const [selected, setSelected] = useState(null)
 
     const loadProperties = () => {
         Util.post_js(`${WEB_URL}/api/ni_deeds/properties`, null,
@@ -46,11 +64,24 @@ export const Properties = React.forwardRef((props, ref) => {
         setSort(prev => ({ key, asc: prev.key === key ? !prev.asc : true }))
     }
 
-    const handleViewPdf = uid => {
+    const handleViewPdf = (e, uid) => {
+        e.stopPropagation()
         window.open(`${WEB_URL}/api/ni_deeds/property/${uid}/pdf`, '_blank')
     }
 
-    const sorted = [...properties].sort((a, b) => {
+    const handleDeleted = () => {
+        setSelected(null)
+        loadProperties()
+    }
+
+    const handlePropertyUpdate = updated => {
+        setProperties(prev => prev.map(p => p.uid === updated.uid ? updated : p))
+        setSelected(updated)
+    }
+
+    const filtered = properties.filter(property => matchesSearch(property, search))
+
+    const sorted = [...filtered].sort((a, b) => {
         const av = sortValue(a, sort.key)
         const bv = sortValue(b, sort.key)
         if ( av < bv ) return sort.asc ? -1 : 1
@@ -81,15 +112,23 @@ export const Properties = React.forwardRef((props, ref) => {
                 <tbody className="divide-y divide-gray-100">
                     {sorted.map(property => (
                         <tr key={property.uid} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900">{property.found_name || '-'}</td>
+                            <td
+                                className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
+                                onClick={() => setSelected(property)}
+                            >
+                                {property.found_name || '-'}
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{(property.content?.riders || []).join(', ') || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
+                            <td
+                                className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
+                                onClick={() => setSelected(property)}
+                            >
                                 {property.timestamp_on ? new Date(property.timestamp_on).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-4 py-3 text-right">
-                                <button onClick={() => handleViewPdf(property.uid)} title="View PDF">
+                                <button onClick={e => handleViewPdf(e, property.uid)} title="View PDF">
                                     <DocumentTextIcon className="h-5 w-5 text-gray-500 hover:text-blue-600" />
                                 </button>
                             </td>
@@ -104,6 +143,15 @@ export const Properties = React.forwardRef((props, ref) => {
                     )}
                 </tbody>
             </table>
+
+            <PropertyDetailModal
+                open={!!selected}
+                property={selected}
+                onClose={() => setSelected(null)}
+                onDeleted={handleDeleted}
+                onUpdate={handlePropertyUpdate}
+                showToast={showToast}
+            />
         </div>
     )
 })

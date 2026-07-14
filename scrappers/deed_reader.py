@@ -16,6 +16,7 @@ STRUCTURE = {
     "bank_name": "The name of the bank or lender",
     "riders": "List of the checked/X'ed rider boxes on the deed",
     "loan_amount": "The loan amount, if present on the deed, as a string",
+    "rider_section_found": "True if the rider setion of checkboxes was found on this page"
 }
 
 SYSTEM_PROMPT = """You are reading a single page of a scanned property deed.
@@ -60,7 +61,7 @@ def image_to_base64(path: str) -> str:
         return base64.b64encode(f.read()).decode("ascii")
 
 
-async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None) -> Result[dict, str]:
+async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None, page_limit=3) -> Result[dict, str]:
     try:
         work_dir = pdf_to_images(pdf_path)
     except subprocess.CalledProcessError as e:
@@ -79,7 +80,10 @@ async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: li
         'POSSIBLE_ADDRESSES': possible_addresses or [],
     }
 
-    for page_name in page_names:
+    for page_idx, page_name in enumerate(page_names):
+        if page_idx >= page_limit:
+            break
+
         print(f"Processing {page_name}...")
         try:
             image = image_to_base64(os.path.join(work_dir, page_name))
@@ -110,6 +114,10 @@ If no riders are found, prefer null riders.""",
             if k == 'riders':
                 if len(ary := util.xlist(v)) > 0:
                     memory[k] = ary
+            if k == "rider_section_found":
+                if util.xbool(v) and 'rider_page' not in memory:
+                    memory['rider_section_found'] = True
+                    memory['rider_page'] = page_name
             elif v is not None:
                 memory[k] = v
         print(f"  {page_name}: memory now {memory}")

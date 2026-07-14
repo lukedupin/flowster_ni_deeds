@@ -86,7 +86,8 @@ export const Deeds = props => {
 
     const handleSend = (message, model) => {
         setScrollLock(true)
-        conversationRef.current.handleSend(message, model, [], '/api/ni_deeds/chat')
+        const params = search ? `?search=${encodeURIComponent(search)}` : ''
+        conversationRef.current.handleSend(message, model, [], `/api/ni_deeds/chat${params}`)
     }
 
     useEffect(() => {
