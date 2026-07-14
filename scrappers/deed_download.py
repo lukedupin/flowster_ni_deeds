@@ -7,6 +7,8 @@ import sys
 import cv2
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
+TEMPLATE_PATH = os.path.join(os.getcwd(), "ni_deeds", "template.png")
+
 
 async def click_template_matches(page, screenshot_path: str, template_path: str, threshold=0.8) -> bool:
     screenshot = cv2.imread(screenshot_path)
@@ -73,7 +75,7 @@ async def download_document(page, instruments: set) -> str | None:
         screenshot_path = "page.png"
         print(f"Saving screenshot to {screenshot_path}...")
         await page.screenshot(path=screenshot_path)
-        if await click_template_matches(page, screenshot_path, "template.png"):
+        if await click_template_matches(page, screenshot_path, TEMPLATE_PATH):
             break
     else:
         print("Template match not found after 3 attempts, continuing...")
@@ -149,7 +151,7 @@ async def process_pdf_urls(page, pdf_url) -> None:
     print(f"Saving screenshot to {screenshot_path}...")
     await page.screenshot(path=screenshot_path)
 
-    await click_template_matches(page, screenshot_path, "template.png")
+    await click_template_matches(page, screenshot_path, TEMPLATE_PATH)
 
 
 def add_pdf_extension(directory: str) -> None:
