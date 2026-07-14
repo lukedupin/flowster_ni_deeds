@@ -3,6 +3,7 @@ import sys
 from urllib.parse import urlencode, quote
 from flowster.stdlib.ai.llm import chat
 from flowster import FlowSheet, FlowProfile
+from result import Result, Ok, Err
 import json
 
 import httpx
@@ -53,17 +54,47 @@ async def lookup(address: str) -> str:
         cookie_str = await fetch_cookie(client, address)
         return await get_data(client, address, cookie_str)
 
-async def resolve_owner_name(address: str) -> str | None:
+async def resolve_owner_name(flow_sheet: FlowSheet, address: str) -> Result[str, str]:
     address = address.replace(' ', '%20')
 
-    result = await lookup(address)
-    result_js = json.loads(result)
-    if len(result_js['items']) == 0:
-        return None
+    try:
+        result = await lookup(address)
+    except httpx.HTTPStatusError as e:
+        return Err(f"HTTP error {e.response.status_code}: {e}")
+    except httpx.HTTPError as e:
+        return Err(f"Request error: {e}")
+
+    try:
+        result_js = json.loads(result)
+    except json.JSONDecodeError as e:
+        return Err(f"Invalid response for address {address}: {e}")
+
+    if len(result_js.get('items', [])) == 0:
+        return Err(f"No owner found for address: {address}")
 
     raw_name = result_js["items"][0].get("fields", {}).get("Owner")
     if not raw_name:
-        return None
+        return Err(f"No owner found for address: {address}")
+
+    result = await chat(
+            flow_sheet,
+            raw_name,
+            system="""Return the name in the format: Last, First.
+If there are multiple owners, return the first one only.
+If no owner is found, return the original prompt.
+Only return the name, do not include any other text or explanation.
+""",
+        )
+    if result.is_err() or not result.ok_value:
+        return Ok(raw_name)
+
+    return result
+
+
+async def main() -> None:
+    if len(sys.argv) < 2:
+        print("⚠️  Please supply an address: e.g., `python 1_resolve_address_name.py 2045 W Camus Dr`")
+        sys.exit(1)
 
     profile = FlowProfile({
         'llm': {
@@ -75,36 +106,15 @@ async def resolve_owner_name(address: str) -> str | None:
             }
         }
     })
-
     flow_sheet = FlowSheet( "Dogs", None, profile )
 
-    result = await chat(
-        flow_sheet,
-        raw_name,
-        system="""Return the name in the format: Last, First.
-If there are multiple owners, return the first one only.
-If no owner is found, return the original prompt.
-Only return the name, do not include any other text or explanation.
-""",
-    )
-    if result.is_err():
-        raise RuntimeError(result.err_value)
-
-    return result.ok_value
-
-
-async def main() -> None:
-    if len(sys.argv) < 2:
-        print("⚠️  Please supply an address: e.g., `python 1_resolve_address_name.py 2045 W Camus Dr`")
-        sys.exit(1)
-
     address = "%20".join(sys.argv[1:])
-    name = await resolve_owner_name(address)
-    if name is None:
-        print(f"⚠️  No owner found for address: {address}")
+    result = await resolve_owner_name(flow_sheet, address)
+    if result.is_err():
+        print(f"⚠️  {result.err_value}")
         sys.exit(1)
 
-    print(name)
+    print(result.ok_value)
 
 if __name__ == "__main__":
     asyncio.run(main())

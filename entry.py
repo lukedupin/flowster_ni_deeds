@@ -1,5 +1,4 @@
 import os
-import re
 
 from django.core.files import File
 from django.db import IntegrityError
@@ -73,24 +72,28 @@ async def process_address(request: Request):
     if not address:
         return _fail(reason="address is required")
 
+    flow_sheet = gen_flow_sheet(request.headers)
+
     try:
-        property = await Property.objects.acreate(initial_address=address)
-    except IntegrityError:
         property = await Property.objects.aget(initial_address=address)
+        if property is None:
+            property = await Property.objects.acreate(initial_address=address)
+    except IntegrityError:
+        return _fail(reason=f"Failed to create property for address: {address}")
 
     # 1_resolve_address_name: find the property owner's name from the address
-    found_name = await resolve_owner_name(address)
-    if found_name is None:
-        return _fail(reason=f"No owner found for address: {address}")
+    if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
+        return _fail(reason=_ret.err_value)
+    found_name = _ret.ok_value
 
     property.found_name = found_name
     await property.asave()
 
     # 2_deed_download: download the deed PDF(s) recorded under the owner's name
-    await search_deeds(found_name)
+    if (_ret := await search_deeds(found_name)).is_err():
+        return _fail(reason=_ret.err_value)
+    download_dir = _ret.ok_value
 
-    dir_name = re.sub(r"[^a-z0-9]", "_", found_name.lower())
-    download_dir = os.path.join(os.getcwd(), "pdfs", dir_name)
     pdf_names = sorted(
         name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
     ) if os.path.isdir(download_dir) else []
@@ -102,7 +105,9 @@ async def process_address(request: Request):
         property.blob.save(pdf_names[0], File(handle), save=False)
 
     # 3_deed_reader: extract structured data from the downloaded deed PDF
-    content = await read_deed(pdf_path, [address])
+    if (_ret := await read_deed(flow_sheet, pdf_path, [address])).is_err():
+        return _fail(reason=_ret.err_value)
+    content = _ret.ok_value
     property.content = content
     await property.asave()
 

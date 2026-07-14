@@ -8,6 +8,7 @@ import json
 from flowster import FlowSheet, FlowProfile
 from flowster.core import util
 from flowster.tools.memory_agent import memory_agent
+from result import Result, Ok, Err
 
 STRUCTURE = {
     "owner": "the name of the property owner/grantee",
@@ -59,23 +60,18 @@ def image_to_base64(path: str) -> str:
         return base64.b64encode(f.read()).decode("ascii")
 
 
-async def read_deed(pdf_path: str, possible_addresses: list[str] = None) -> dict:
-    work_dir = pdf_to_images(pdf_path)
+async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None) -> Result[dict, str]:
+    try:
+        work_dir = pdf_to_images(pdf_path)
+    except subprocess.CalledProcessError as e:
+        return Err(f"Failed to convert PDF to images: {e}")
+    except OSError as e:
+        return Err(f"Failed to convert PDF to images: {e}")
+
     page_names = sorted(name for name in os.listdir(work_dir) if name.startswith("page__"))
     print(f"Found {len(page_names)} page(s) to process.")
-
-    model = 'mistral-small3.2'
-    #model = 'gemma4:31b'
-    profile = FlowProfile({
-        'llm': {
-            'default': {
-                'type': 'ollama',
-                'model_name': model,
-                'streaming': True,
-            }
-        }
-    })
-    flow_sheet = FlowSheet("DeedReader", None, profile)
+    if not page_names:
+        return Err(f"No pages found in PDF: {pdf_path}")
 
     memory = {k: None for k in STRUCTURE.keys()}
     memory['riders'] = []
@@ -85,22 +81,26 @@ async def read_deed(pdf_path: str, possible_addresses: list[str] = None) -> dict
 
     for page_name in page_names:
         print(f"Processing {page_name}...")
-        image = image_to_base64(os.path.join(work_dir, page_name))
+        try:
+            image = image_to_base64(os.path.join(work_dir, page_name))
+        except OSError as e:
+            print(f"  {page_name}: error - {e}")
+            continue
         #print(len(image))
 
         result = await memory_agent(
             flow_sheet,
-            """Only fill out the address if it is found in the page. 
-Prefer null address if none is found. 
-If no bank is found, prefer null bank. 
-If no loan amount is found, prefer null loan amount. 
+            """Only fill out the address if it is found in the page.
+Prefer null address if none is found.
+If no bank is found, prefer null bank.
+If no loan amount is found, prefer null loan amount.
 If no riders are found, prefer null riders.""",
             system=SYSTEM_PROMPT,
             contexts=contexts,
             memory=memory,
             data=STRUCTURE,
             images=[image],
-            model=model,
+            credentials='vision',
         )
         if result.is_err():
             print(f"  {page_name}: error - {result.err_value}")
@@ -118,7 +118,7 @@ If no riders are found, prefer null riders.""",
             print(f"  All fields found by {page_name}, stopping early.")
             break
 
-    return memory
+    return Ok(memory)
 
 
 async def main() -> None:
@@ -126,12 +126,32 @@ async def main() -> None:
         print("Usage: python 3_deed_reader.py <pdf_path> [possible_address]")
         sys.exit(1)
 
+    profile = FlowProfile({
+        'llm': {
+            'default': {
+                'type': 'ollama',
+                'model_name': 'gpt-oss-gpu-large',
+                'streaming': True,
+            },
+            'vision': {
+                'type': 'ollama',
+                'model_name': 'mistral-small3.2',
+                'streaming': True,
+            },
+        }
+    })
+    flow_sheet = FlowSheet("DeedReader", None, profile)
+
     pdf_path = sys.argv[1]
     possible_addresses = sys.argv[2:]
     print(f"Starting deed read: {pdf_path}")
-    data = await read_deed(pdf_path, possible_addresses)
+    result = await read_deed(flow_sheet, pdf_path, possible_addresses)
+    if result.is_err():
+        print(f"⚠️  {result.err_value}")
+        sys.exit(1)
+
     print("Final extracted data:")
-    print(json.dumps(data, indent=2))
+    print(json.dumps(result.ok_value, indent=2))
 
 
 if __name__ == "__main__":

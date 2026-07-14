@@ -6,6 +6,7 @@ import sys
 
 import cv2
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from result import Result, Ok, Err
 
 TEMPLATE_PATH = os.path.join(os.getcwd(), "ni_deeds", "template.png")
 
@@ -161,27 +162,38 @@ def add_pdf_extension(directory: str) -> None:
             os.rename(path, path + ".pdf")
 
 
-async def search_deeds(name: str) -> None:
+async def search_deeds(name: str) -> Result[str, str]:
     dir_name = re.sub(r"[^a-z0-9]", "_", name.lower())
     download_dir = os.path.join(os.getcwd(), "pdfs", dir_name)
-    if os.path.exists(download_dir):
-        shutil.rmtree(download_dir)
-    os.makedirs(download_dir)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False, downloads_path=download_dir)
-        page = await browser.new_page()
+    try:
+        if os.path.exists(download_dir):
+            shutil.rmtree(download_dir)
+        os.makedirs(download_dir)
 
-        pdf_urls = await find_pdf_urls(page, name)
-        #input("Press Enter to process PDF URLs...")
-        print(f"Found {len(pdf_urls)} PDF URLs.")
-        for pdf_url in pdf_urls:
-            pass #await process_pdf_urls(page, pdf_url)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=False, downloads_path=download_dir)
+            try:
+                page = await browser.new_page()
 
-        #input("Press Enter to close browser...")
-        await browser.close()
+                pdf_urls = await find_pdf_urls(page, name)
+                #input("Press Enter to process PDF URLs...")
+                print(f"Found {len(pdf_urls)} PDF URLs.")
+                for pdf_url in pdf_urls:
+                    pass #await process_pdf_urls(page, pdf_url)
 
-    add_pdf_extension(download_dir)
+                #input("Press Enter to close browser...")
+            finally:
+                await browser.close()
+
+        add_pdf_extension(download_dir)
+
+    except PlaywrightTimeoutError as e:
+        return Err(f"Timed out searching deeds for {name}: {e}")
+    except Exception as e:
+        return Err(f"Failed to search deeds for {name}: {e}")
+
+    return Ok(download_dir)
 
 
 async def main() -> None:
@@ -191,7 +203,12 @@ async def main() -> None:
 
     name = " ".join(sys.argv[1:])
     print(f"Searching deeds for: {name}")
-    await search_deeds(name)
+    result = await search_deeds(name)
+    if result.is_err():
+        print(f"⚠️  {result.err_value}")
+        sys.exit(1)
+
+    print(f"Saved deeds to: {result.ok_value}")
 
 
 if __name__ == "__main__":
