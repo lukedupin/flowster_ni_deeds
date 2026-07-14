@@ -1,0 +1,7 @@
+{
+    "title": "Deeds",
+    "components": [
+        {"name": "Deeds", "comp": "Deeds", "path": "/", "icon": "HomeIcon"}
+    ]
+}
+
