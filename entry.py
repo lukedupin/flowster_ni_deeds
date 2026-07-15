@@ -91,8 +91,6 @@ async def process_address(request: Request):
     body = await request.json()
     address: str = body.get('address', '')
 
-    progress_queue = asyncio.Queue()
-
     async def stream( progress_queue ):
         async def done(x):
             await progress_queue.put(None)
@@ -138,7 +136,7 @@ async def process_address(request: Request):
         ##############
 
         # 3_deed_reader: extract structured data from the downloaded deed PDF
-        if (_ret := await read_deed(flow_sheet, pdf_path, [address], progress_queue)).is_err():
+        if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_err():
             return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
         content = _ret.ok_value
         property.content = content
@@ -148,6 +146,7 @@ async def process_address(request: Request):
         return await done(_sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)}))
     
     async def stream_with_progress():
+        progress_queue = asyncio.Queue()
         task = asyncio.create_task(stream(progress_queue))
 
         while True:
@@ -157,6 +156,7 @@ async def process_address(request: Request):
                 break
             if message is None:
                 break
+            print(message)
             yield _sse({"type": "progress", "message": message})
 
         yield await task
