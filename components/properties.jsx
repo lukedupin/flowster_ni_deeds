@@ -13,12 +13,19 @@ const COLUMNS = [
     { key: 'timestamp_on', label: 'Created On' },
 ]
 
+const formatRiders = riders => {
+    if ( Array.isArray(riders) ) {
+        return riders.join(', ')
+    }
+    return riders || ''
+}
+
 const sortValue = (property, key) => {
     switch ( key ) {
         case 'amount':
             return property.content?.loan_amount || ''
         case 'riders':
-            return (property.content?.riders || []).join(', ')
+            return formatRiders(property.content?.riders)
         default:
             return property[key] || ''
     }
@@ -120,7 +127,7 @@ export const Properties = React.forwardRef((props, ref) => {
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{(property.content?.riders || []).join(', ') || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatRiders(property.content?.riders) || '-'}</td>
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
                                 onClick={() => setSelected(property)}

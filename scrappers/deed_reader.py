@@ -35,7 +35,7 @@ Return the entire MEMORY state with new information added.
 """
 
 
-def pdf_to_images(pdf_path: str) -> str:
+def pdf_to_images(pdf_path: str, dpi=150) -> str:
     pdf_path = os.path.abspath(pdf_path)
     work_dir = os.path.splitext(pdf_path)[0]
     os.makedirs(work_dir, exist_ok=True)
@@ -43,7 +43,7 @@ def pdf_to_images(pdf_path: str) -> str:
     print(f"Converting PDF to images: {pdf_path} -> {work_dir}")
     subprocess.run(
         [
-            "gs", "-sDEVICE=png16m", "-r150", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
+            "gs", "-sDEVICE=png16m", f"-r{dpi}", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
             "-o", "page__%04d.png", pdf_path,
         ],
         cwd=work_dir,
@@ -63,7 +63,7 @@ def image_to_base64(path: str) -> str:
 
 async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None, page_limit=3) -> Result[dict, str]:
     try:
-        work_dir = pdf_to_images(pdf_path)
+        work_dir = pdf_to_images(pdf_path, dpi=75)
     except subprocess.CalledProcessError as e:
         return Err(f"Failed to convert PDF to images: {e}")
     except OSError as e:
