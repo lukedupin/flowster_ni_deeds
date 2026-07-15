@@ -96,8 +96,7 @@ async def process_address(request: Request):
     async def stream( progress_queue ):
         try:
             if not address:
-                yield _sse({"type": "fail", **_fail("address is required")})
-                return
+                return _sse({"type": "fail", **_fail("address is required")})
 
             flow_sheet = gen_flow_sheet(request.headers)
 
@@ -144,6 +143,8 @@ async def process_address(request: Request):
             await property.asave()
 
             return _sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)})
+        except e:
+            return return _sse({"type": "fail", **(_fail(str(e)))})
 
         finally:
             await progress_queue.put(None)
