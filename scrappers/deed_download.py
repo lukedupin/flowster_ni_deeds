@@ -172,7 +172,8 @@ async def search_deeds(name: str) -> Result[str, str]:
         os.makedirs(download_dir)
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, downloads_path=download_dir)
+            browser = await p.chromium.launch(headless=False, downloads_path=download_dir) #, args=["--headless=new"])
+
             try:
                 page = await browser.new_page()
 
