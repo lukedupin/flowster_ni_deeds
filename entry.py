@@ -94,60 +94,58 @@ async def process_address(request: Request):
     progress_queue = asyncio.Queue()
 
     async def stream( progress_queue ):
-        try:
-            if not address:
-                return _sse({"type": "fail", **_fail("address is required")})
-
-            flow_sheet = gen_flow_sheet(request.headers)
-
-            property = await Property.getOrCreate(address)
-
-            async def _fail_log(reason, **kwargs):
-                property.processing_log = reason
-                await property.asave()
-                return _fail(reason, **kwargs)
-
-            # 1_resolve_address_name: find the property owner's name from the address
-            if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
-                return _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
-            found_name = _ret.ok_value
-            await progress_queue.put( f"Found name: {found_name}")
-
-            property.found_name = found_name
-            await property.asave()
-
-            # 2_deed_download: download the deed PDF(s) recorded under the owner's name
-            if (_ret := await search_deeds(found_name, progress_queue)).is_err():
-                return _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
-            download_dir = _ret.ok_value
-
-            ############# Wrong shit AI code
-            pdf_names = sorted(
-                name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
-            ) if os.path.isdir(download_dir) else []
-            if not pdf_names:
-                return _sse({"type": "fail", **(await _fail_log(f"No deeds found for: {found_name}"))})
-
-            pdf_path = os.path.join(download_dir, pdf_names[0])
-            with open(pdf_path, "rb") as handle:
-                property.blob.save(pdf_names[0], File(handle), save=False)
-            await property.asave()
-            ##############
-
-            # 3_deed_reader: extract structured data from the downloaded deed PDF
-            if (_ret := await read_deed(flow_sheet, pdf_path, [address], progress_queue)).is_err():
-                return _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
-            content = _ret.ok_value
-            property.content = content
-            property.processing_log = ""
-            await property.asave()
-
-            return _sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)})
-        except e:
-            return return _sse({"type": "fail", **(_fail(str(e)))})
-
-        finally:
+        async def done(x):
             await progress_queue.put(None)
+            return x
+
+        if not address:
+            return await done(_sse({"type": "fail", **_fail("address is required")}))
+
+        flow_sheet = gen_flow_sheet(request.headers)
+
+        property = await Property.getOrCreate(address)
+
+        async def _fail_log(reason, **kwargs):
+            property.processing_log = reason
+            await property.asave()
+            return _fail(reason, **kwargs)
+
+        # 1_resolve_address_name: find the property owner's name from the address
+        if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
+            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
+        found_name = _ret.ok_value
+        await progress_queue.put( f"Found name: {found_name}")
+
+        property.found_name = found_name
+        await property.asave()
+
+        # 2_deed_download: download the deed PDF(s) recorded under the owner's name
+        if (_ret := await search_deeds(found_name, progress_queue)).is_err():
+            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
+        download_dir = _ret.ok_value
+
+        ############# Wrong shit AI code
+        pdf_names = sorted(
+            name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
+        ) if os.path.isdir(download_dir) else []
+        if not pdf_names:
+            return await done(_sse({"type": "fail", **(await _fail_log(f"No deeds found for: {found_name}"))}))
+
+        pdf_path = os.path.join(download_dir, pdf_names[0])
+        with open(pdf_path, "rb") as handle:
+            property.blob.save(pdf_names[0], File(handle), save=False)
+        await property.asave()
+        ##############
+
+        # 3_deed_reader: extract structured data from the downloaded deed PDF
+        if (_ret := await read_deed(flow_sheet, pdf_path, [address], progress_queue)).is_err():
+            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
+        content = _ret.ok_value
+        property.content = content
+        property.processing_log = ""
+        await property.asave()
+
+        return await done(_sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)}))
     
     async def stream_with_progress():
         task = asyncio.create_task(stream(progress_queue))
@@ -161,7 +159,7 @@ async def process_address(request: Request):
                 break
             yield _sse({"type": "progress", "message": message})
 
-        yield _sse( await task )
+        yield await task
 
     return StreamingResponse(
         stream_with_progress(),
