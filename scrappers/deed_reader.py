@@ -105,6 +105,7 @@ If no riders are found, prefer null riders.""",
             data=STRUCTURE,
             images=[image],
             credentials='vision',
+            thinking=False,
         )
         if result.is_err():
             print(f"  {page_name}: error - {result.err_value}")
