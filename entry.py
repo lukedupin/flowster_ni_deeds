@@ -151,12 +151,12 @@ async def process_address(request: Request):
 
         while True:
             try:
-                message = progress_queue.get_nowait()
+                message = await progress_queue.get()
             except asyncio.QueueEmpty:
                 break
             if message is None:
                 break
-            print(message)
+            print("FUCK", message)
             yield _sse({"type": "progress", "message": message})
 
         yield await task
