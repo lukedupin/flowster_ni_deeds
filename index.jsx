@@ -145,7 +145,7 @@ export const Deeds = props => {
 
 
                 {processing.length > 0 && (
-                <div className="w-full px-4 flex flex-row sm:items-start gap-4">
+                <div className="w-full px-4 inline-flex sm:items-start gap-4">
                     <ul className="space-y-1">
                         {processing.map((address, idx) => (
                             <li key={address} className="text-sm text-gray-600">
