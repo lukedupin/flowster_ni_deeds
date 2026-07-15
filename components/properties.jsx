@@ -52,6 +52,7 @@ export const Properties = React.forwardRef((props, ref) => {
     const [properties, setProperties] = useState([])
     const [sort, setSort] = useState({ key: 'initial_address', asc: true })
     const [selected, setSelected] = useState(null)
+    const [highlightedUid, setHighlightedUid] = useState(null)
 
     const loadProperties = () => {
         Util.post_js(`${WEB_URL}/api/ni_deeds/properties`, null,
@@ -73,6 +74,7 @@ export const Properties = React.forwardRef((props, ref) => {
 
     const handleViewPdf = (e, uid) => {
         e.stopPropagation()
+        setHighlightedUid(uid)
         window.open(`${WEB_URL}/api/ni_deeds/property/${uid}/pdf`, '_blank')
     }
 
@@ -118,7 +120,11 @@ export const Properties = React.forwardRef((props, ref) => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                     {sorted.map(property => (
-                        <tr key={property.uid} className="hover:bg-gray-50">
+                        <tr
+                            key={property.uid}
+                            onClick={() => setHighlightedUid(property.uid)}
+                            className={`hover:bg-gray-50 ${highlightedUid === property.uid ? 'bg-blue-50' : ''}`}
+                        >
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
                                 onClick={() => setSelected(property)}

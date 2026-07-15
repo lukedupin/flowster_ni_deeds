@@ -159,7 +159,7 @@ async def process_address(request: Request):
                 if message is None:
                     break
                 yield _sse({"type": "progress", "message": message})
-        task = asyncio.create_task(progress())
+        task = asyncio.create_task(progress)
 
         # Send all the messages
         async for x in stream():
