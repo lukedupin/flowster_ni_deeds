@@ -156,14 +156,14 @@ async def process_pdf_urls(page, pdf_url) -> None:
 
 
 async def screenshot_loop() -> None:
-    screenshot_path = os.path.join(os.getcwd(), "/dist/assets/screenshot.png")
+    screenshot_path = os.path.join(os.getcwd(), "./dist/assets/screenshot.png")
     try:
         while True:
             proc = await asyncio.create_subprocess_exec(
                 "import", "-display", ":99", "-window", "root", screenshot_path,
             )
             await proc.wait()
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
     except asyncio.CancelledError:
         pass
 

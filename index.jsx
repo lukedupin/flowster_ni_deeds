@@ -135,8 +135,9 @@ export const Deeds = props => {
                 </button>
             </div>
 
-            {processing.length > 0 && (
-                <div className="w-full px-4 flex flex-col sm:flex-row sm:items-start gap-4">
+
+                    {processing.length > 0 && (
+                <div className="w-full px-4 flex flex-row sm:items-start gap-4">
                     <ul className="space-y-1">
                         {processing.map(address => (
                             <li key={address} className="flex items-center gap-2 text-sm text-gray-600">
@@ -149,7 +150,7 @@ export const Deeds = props => {
                     <img
                         src={`/assets/screenshot.png?t=${screenshotTick}`}
                         alt="Live progress screenshot"
-                        className="w-full sm:w-64 h-auto sm:h-40 object-contain rounded-md border border-gray-200 shadow-sm bg-white"
+                        className="w-64 rounded-md border border-gray-200 shadow-sm bg-white"
                     />
                 </div>
             )}
