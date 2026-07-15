@@ -63,7 +63,7 @@ def image_to_base64(path: str) -> str:
 
 async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None, page_limit=3) -> Result[dict, str]:
     try:
-        work_dir = pdf_to_images(pdf_path, dpi=75)
+        work_dir = pdf_to_images(pdf_path, dpi=150)
     except subprocess.CalledProcessError as e:
         return Err(f"Failed to convert PDF to images: {e}")
     except OSError as e:
