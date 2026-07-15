@@ -11,19 +11,25 @@ from result import Result, Ok, Err
 TEMPLATE_PATH = os.path.join(os.getcwd(), "ni_deeds", "template.png")
 
 
-async def click_template_matches(page, screenshot_path: str, template_path: str, threshold=0.8) -> bool:
+async def _progress(progress: asyncio.Queue | None, message: str) -> None:
+    print(message)
+    if progress is not None:
+        await progress.put(message)
+
+
+async def click_template_matches(page, screenshot_path: str, template_path: str, threshold=0.8, progress: asyncio.Queue | None = None) -> bool:
     screenshot = cv2.imread(screenshot_path)
     template = cv2.imread(template_path)
     th, tw = template.shape[:2]
 
     result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
     _, best_val, _, (x, y) = cv2.minMaxLoc(result)
-    print(f"Best match: {best_val * 100:.1f}% at ({x}, {y})")
+    await _progress(progress, f"Best match: {best_val * 100:.1f}% at ({x}, {y})")
     if best_val < threshold:
         return False
 
     center_x, center_y = x + tw // 2, y + th // 2
-    print(f"  Clicking center ({center_x}, {center_y})")
+    await _progress(progress, f"  Clicking center ({center_x}, {center_y})")
     await page.mouse.click(center_x, center_y)
 
     marked = screenshot.copy()
@@ -32,83 +38,83 @@ async def click_template_matches(page, screenshot_path: str, template_path: str,
     return True
 
 
-async def download_document(page, instruments: set) -> str | None:
+async def download_document(page, instruments: set, progress: asyncio.Queue | None = None) -> str | None:
     await page.wait_for_selector("#cphNoMargin_ImageViewer1_ifrLTViewer")
-    print("Waiting for download link #cphNoMargin_OptionsBar1_lnkDld...")
+    await _progress(progress, "Waiting for download link #cphNoMargin_OptionsBar1_lnkDld...")
     await page.wait_for_selector("#cphNoMargin_OptionsBar1_lnkDld")
     await asyncio.sleep(2)
 
     instrument = (await page.locator("[id$='txtInstrumentNo']").inner_text()).strip()
-    print(f"  Instrument number: {instrument}")
+    await _progress(progress, f"  Instrument number: {instrument}")
     if instrument in instruments:
-        print(f"  Instrument {instrument} already downloaded, skipping.")
+        await _progress(progress, f"  Instrument {instrument} already downloaded, skipping.")
         return None
     instruments.add(instrument)
 
     iframe = None
     for attempt in range(1, 4):
         await page.click("#cphNoMargin_OptionsBar1_lnkDld")
-        print("Clicked download link, waiting for option window iframe...")
+        await _progress(progress, "Clicked download link, waiting for option window iframe...")
 
         await asyncio.sleep(2)
 
         iframe = page.frame_locator("#ifrOptionWindow")
         await iframe.locator("#btnProcessNow").wait_for()
-        print("Found #btnProcessNow in ifrOptionWindow, clicking...")
+        await _progress(progress, "Found #btnProcessNow in ifrOptionWindow, clicking...")
         await iframe.locator("#btnProcessNow").click()
 
-        print(f"Waiting for PDF window iframe #ifrPDFWindow (attempt {attempt}/3)...")
+        await _progress(progress, f"Waiting for PDF window iframe #ifrPDFWindow (attempt {attempt}/3)...")
         try:
             await iframe.locator("#ifrPDFWindow").wait_for(timeout=3000)
             break
         except PlaywrightTimeoutError:
-            print("  Timed out waiting for ifrPDFWindow, closing and retrying...")
+            await _progress(progress, "  Timed out waiting for ifrPDFWindow, closing and retrying...")
             await page.locator("img[alt='Close']").click()
     else:
         raise RuntimeError("ifrPDFWindow never appeared after 3 attempts")
 
     src = await iframe.locator("#ifrPDFWindow").get_attribute("src")
-    print(f"  ifrPDFWindow src: {src}")
+    await _progress(progress, f"  ifrPDFWindow src: {src}")
 
     for attempt in range(1, 4):
         await asyncio.sleep(2)
 
         screenshot_path = "page.png"
-        print(f"Saving screenshot to {screenshot_path}...")
+        await _progress(progress, f"Saving screenshot to {screenshot_path}...")
         await page.screenshot(path=screenshot_path)
-        if await click_template_matches(page, screenshot_path, TEMPLATE_PATH):
+        if await click_template_matches(page, screenshot_path, TEMPLATE_PATH, progress=progress):
             break
     else:
-        print("Template match not found after 3 attempts, continuing...")
+        await _progress(progress, "Template match not found after 3 attempts, continuing...")
 
     pdf_url = f"https://recorder.kcgov.us{src}"
 
-    print("Looking for Close image...")
+    await _progress(progress, "Looking for Close image...")
     await page.locator("img[alt='Close']").click()
 
     return pdf_url
 
 
-async def find_pdf_urls(page, name: str) -> list[str]:
+async def find_pdf_urls(page, name: str, progress: asyncio.Queue | None = None) -> list[str]:
     url = "https://recorder.kcgov.us/RealEstate/SearchEntry.aspx"
     pdf_urls = []
 
-    print("Loading search page...")
+    await _progress(progress, "Loading search page...")
     await page.goto(url)
     await page.wait_for_load_state("networkidle")
 
-    print(f"Checking deed type and entering name... {name}")
+    await _progress(progress, f"Checking deed type and entering name... {name}")
     await page.check("#cphNoMargin_f_dclDocType_9")
     await page.fill("#cphNoMargin_f_txtParty", name)
     async with page.expect_navigation(wait_until="networkidle"):
         await page.keyboard.press("Enter")
-    print(f"Search results loaded: {page.url}")
+    await _progress(progress, f"Search results loaded: {page.url}")
 
     td = page.locator(".fauxDetailLink").last
-    print("Clicking last fauxDetailLink...")
+    await _progress(progress, "Clicking last fauxDetailLink...")
     async with page.expect_navigation(wait_until="load"):
         await td.click()
-    print(f"Detail page loaded: {page.url}")
+    await _progress(progress, f"Detail page loaded: {page.url}")
 
     # Rewind to the starting document since we might be in the middle
     for _ in range(100):
@@ -123,7 +129,7 @@ async def find_pdf_urls(page, name: str) -> list[str]:
     instruments = set()
 
     for _ in range(100):
-        pdf_url = await download_document(page, instruments)
+        pdf_url = await download_document(page, instruments, progress)
         if pdf_url is not None:
             pdf_urls.append(pdf_url)
 
@@ -131,28 +137,28 @@ async def find_pdf_urls(page, name: str) -> list[str]:
         is_disabled = await prev_img.evaluate("el => el.hasAttribute('disabled')")
         if not is_disabled:
             await asyncio.sleep(1)
-            print("OptionsBar1_imgNext is enabled, looping back for next record...")
+            await _progress(progress, "OptionsBar1_imgNext is enabled, looping back for next record...")
             await prev_img.click()
             await asyncio.sleep(2)
             continue
 
-        print(f"OptionsBar1_imgNext is disabled, found {len(pdf_urls)} PDF URLs.")
+        await _progress(progress, f"OptionsBar1_imgNext is disabled, found {len(pdf_urls)} PDF URLs.")
         return pdf_urls
 
 
-async def process_pdf_urls(page, pdf_url) -> None:
-    print(f"  Opening new tab: {pdf_url}")
+async def process_pdf_urls(page, pdf_url, progress: asyncio.Queue | None = None) -> None:
+    await _progress(progress, f"  Opening new tab: {pdf_url}")
     await page.goto(pdf_url)
     await page.wait_for_load_state("load")
     await page.wait_for_load_state("networkidle")
     await page.wait_for_timeout(2000)
-    print("  PDF tab loaded.")
+    await _progress(progress, "  PDF tab loaded.")
 
     screenshot_path = "page.png"
-    print(f"Saving screenshot to {screenshot_path}...")
+    await _progress(progress, f"Saving screenshot to {screenshot_path}...")
     await page.screenshot(path=screenshot_path)
 
-    await click_template_matches(page, screenshot_path, TEMPLATE_PATH)
+    await click_template_matches(page, screenshot_path, TEMPLATE_PATH, progress=progress)
 
 
 async def screenshot_loop() -> None:
@@ -175,7 +181,7 @@ def add_pdf_extension(directory: str) -> None:
             os.rename(path, path + ".pdf")
 
 
-async def search_deeds(name: str) -> Result[str, str]:
+async def search_deeds(name: str, progress: asyncio.Queue | None = None) -> Result[str, str]:
     dir_name = re.sub(r"[^a-z0-9]", "_", name.lower())
     download_dir = os.path.join(os.getcwd(), "pdfs", dir_name)
 
@@ -191,11 +197,11 @@ async def search_deeds(name: str) -> Result[str, str]:
                 page = await browser.new_page()
                 timer_task = asyncio.create_task(screenshot_loop())
 
-                pdf_urls = await find_pdf_urls(page, name)
+                pdf_urls = await find_pdf_urls(page, name, progress)
                 #input("Press Enter to process PDF URLs...")
-                print(f"Found {len(pdf_urls)} PDF URLs.")
+                await _progress(progress, f"Found {len(pdf_urls)} PDF URLs.")
                 for pdf_url in pdf_urls:
-                    pass #await process_pdf_urls(page, pdf_url)
+                    pass #await process_pdf_urls(page, pdf_url, progress)
 
                 #input("Press Enter to close browser...")
             finally:

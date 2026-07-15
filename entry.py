@@ -91,6 +91,8 @@ async def process_address(request: Request):
     body = await request.json()
     address: str = body.get('address', '')
 
+    progress_queue = asyncio.Queue()
+
     async def stream():
         if not address:
             yield _sse({"type": "fail", **_fail("address is required")})
@@ -114,12 +116,15 @@ async def process_address(request: Request):
         property.found_name = found_name
         await property.asave()
 
+        yield _sse({"type": "progress", "message": f"Found name: {found_name}"})
+
         # 2_deed_download: download the deed PDF(s) recorded under the owner's name
-        if (_ret := await search_deeds(found_name)).is_err():
+        if (_ret := await search_deeds(found_name, progress_queue)).is_err():
             yield _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
             return
         download_dir = _ret.ok_value
 
+        ############# Wrong shit AI code
         pdf_names = sorted(
             name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
         ) if os.path.isdir(download_dir) else []
@@ -131,9 +136,10 @@ async def process_address(request: Request):
         with open(pdf_path, "rb") as handle:
             property.blob.save(pdf_names[0], File(handle), save=False)
         await property.asave()
+        ##############
 
         # 3_deed_reader: extract structured data from the downloaded deed PDF
-        if (_ret := await read_deed(flow_sheet, pdf_path, [address])).is_err():
+        if (_ret := await read_deed(flow_sheet, pdf_path, [address], progress_queue)).is_err():
             yield _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
             return
         content = _ret.ok_value
@@ -142,9 +148,36 @@ async def process_address(request: Request):
         await property.asave()
 
         yield _sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)})
+    
+    async def stream_with_progress():
+        async def progress():
+            while True:
+                try:
+                    message = progress_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if message is None:
+                    break
+                yield _sse({"type": "progress", "message": message})
+        task = asyncio.create_task(progress())
+
+        # Send all the messages
+        async for x in stream():
+            yield x
+
+        # Kill the progress update
+        await progress_queue.put(None)
+        await asyncio.sleep(0.1)
+
+        # Clean up
+        try:
+            task.cancel()
+            await task
+        except:
+            pass
 
     return StreamingResponse(
-        stream(),
+        stream_with_progress(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

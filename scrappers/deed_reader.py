@@ -34,6 +34,10 @@ The STRUCTURE provides detailed information about each field.
 Return the entire MEMORY state with new information added.
 """
 
+async def _progress(progress: asyncio.Queue | None, message: str) -> None:
+    print(message)
+    if progress is not None:
+        await progress.put(message)
 
 def pdf_to_images(pdf_path: str, dpi=150) -> str:
     pdf_path = os.path.abspath(pdf_path)
@@ -61,7 +65,7 @@ def image_to_base64(path: str) -> str:
         return base64.b64encode(f.read()).decode("ascii")
 
 
-async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None, page_limit=3) -> Result[dict, str]:
+async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: list[str] = None, page_limit=-1, progress: asyncio.Queue | None = None) -> Result[dict, str]:
     try:
         work_dir = pdf_to_images(pdf_path, dpi=150)
     except subprocess.CalledProcessError as e:
@@ -70,7 +74,7 @@ async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: li
         return Err(f"Failed to convert PDF to images: {e}")
 
     page_names = sorted(name for name in os.listdir(work_dir) if name.startswith("page__"))
-    print(f"Found {len(page_names)} page(s) to process.")
+    await _progress(progress, f"Found {len(page_names)} page(s) to process.")
     if not page_names:
         return Err(f"No pages found in PDF: {pdf_path}")
 
@@ -81,14 +85,14 @@ async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: li
     }
 
     for page_idx, page_name in enumerate(page_names):
-        if page_idx >= page_limit:
+        if page_limit > 0 and page_idx >= page_limit:
             break
 
-        print(f"Processing {page_name}...")
+        await _progress(progress, f"Processing {page_name}...")
         try:
             image = image_to_base64(os.path.join(work_dir, page_name))
         except OSError as e:
-            print(f"  {page_name}: error - {e}")
+            await _progress(progress, f"  {page_name}: error - {e}")
             continue
         #print(len(image))
 
@@ -107,7 +111,7 @@ If no riders are found, prefer null riders.""",
             credentials='process',
         )
         if result.is_err():
-            print(f"  {page_name}: error - {result.err_value}")
+            await _progress(progress, f"  {page_name}: error - {result.err_value}")
             continue
 
         for k,v in result.ok_value.items():
@@ -120,10 +124,10 @@ If no riders are found, prefer null riders.""",
                     memory['rider_page'] = page_name
             elif v is not None:
                 memory[k] = v
-        print(f"  {page_name}: memory now {memory}")
+        await _progress(progress, f"  {page_name}: memory now {memory}")
 
         if all(memory.get(field) for field in STRUCTURE.keys()):
-            print(f"  All fields found by {page_name}, stopping early.")
+            await _progress(progress, f"  All fields found by {page_name}, stopping early.")
             break
 
     return Ok(memory)

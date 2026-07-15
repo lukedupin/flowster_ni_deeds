@@ -39,6 +39,7 @@ export const Deeds = props => {
     const [scrollLock, setScrollLock] = useState(false)
     const [addPropertiesOpen, setAddPropertiesOpen] = useState(false)
     const [processing, setProcessing] = useState([])
+    const [progressMessage, setProgressMessage] = useState(null)
     const [screenshotTick, setScreenshotTick] = useState(0)
 
     const messagesEndRef = useRef(null)
@@ -97,19 +98,26 @@ export const Deeds = props => {
         }
 
         const address = processing[0]
+        setProgressMessage(null)
         Util.fetch_stream('/api/ni_deeds/process_address', {address},
             js => {
                 if ( js.type === 'fail' ) {
                     showToast?.(js.reason, "error")
+                    setProgressMessage(null)
                     setProcessing(prev => prev.filter(a => a !== address))
                 }
                 else if ( js.type === 'succ' ) {
+                    setProgressMessage(null)
                     setProcessing(prev => prev.filter(a => a !== address))
                     propertiesRef.current?.refresh()
+                }
+                else if ( js.type === 'progress' ) {
+                    setProgressMessage(js.message)
                 }
             },
             err => {
                 showToast?.(err, "error")
+                setProgressMessage(null)
                 setProcessing(prev => prev.filter(a => a !== address))
             })
     }, [processing])
@@ -136,13 +144,15 @@ export const Deeds = props => {
             </div>
 
 
-                    {processing.length > 0 && (
+                {processing.length > 0 && (
                 <div className="w-full px-4 flex flex-row sm:items-start gap-4">
                     <ul className="space-y-1">
-                        {processing.map(address => (
-                            <li key={address} className="flex items-center gap-2 text-sm text-gray-600">
-                                <Spinner className="h-4 w-4 text-blue-500" />
-                                {address}
+                        {processing.map((address, idx) => (
+                            <li key={address} className="text-sm text-gray-600">
+                                <div className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4 text-blue-500" />
+                                    {address}
+                                </div>
                             </li>
                         ))}
                     </ul>
@@ -152,6 +162,10 @@ export const Deeds = props => {
                         alt="Live progress screenshot"
                         className="w-64 rounded-md border border-gray-200 shadow-sm bg-white"
                     />
+
+                    <div className="w-full text-xs text-gray-400">
+                        {progressMessage}
+                    </div>
                 </div>
             )}
 
