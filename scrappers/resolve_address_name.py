@@ -84,6 +84,7 @@ If there are multiple owners, return the first one only.
 If no owner is found, return the original prompt.
 Only return the name, do not include any other text or explanation.
 """,
+            credentials='process',
         )
     if result.is_err() or not result.ok_value:
         return Ok(raw_name)

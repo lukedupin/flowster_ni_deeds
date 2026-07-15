@@ -82,55 +82,75 @@ Do not include any other text or explanation.""",
     return _succ(addresses=_ret.ok_value)
 
 
+def _sse(js: dict) -> str:
+    return f"data: {json.dumps(js)}\n\n"
+
+
 @api_router.post("/process_address")
 async def process_address(request: Request):
     body = await request.json()
     address: str = body.get('address', '')
-    if not address:
-        return _fail("address is required")
 
-    flow_sheet = gen_flow_sheet(request.headers)
+    async def stream():
+        if not address:
+            yield _sse({"type": "fail", **_fail("address is required")})
+            return
 
-    property = await Property.getOrCreate(address)
+        flow_sheet = gen_flow_sheet(request.headers)
 
-    async def _fail_log(reason, **kwargs):
-        property.processing_log = reason
+        property = await Property.getOrCreate(address)
+
+        async def _fail_log(reason, **kwargs):
+            property.processing_log = reason
+            await property.asave()
+            return _fail(reason, **kwargs)
+
+        # 1_resolve_address_name: find the property owner's name from the address
+        if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
+            yield _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
+            return
+        found_name = _ret.ok_value
+
+        property.found_name = found_name
         await property.asave()
-        return _fail(reason, **kwargs)
 
-    # 1_resolve_address_name: find the property owner's name from the address
-    if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
-        return await _fail_log(_ret.err_value)
-    found_name = _ret.ok_value
+        # 2_deed_download: download the deed PDF(s) recorded under the owner's name
+        if (_ret := await search_deeds(found_name)).is_err():
+            yield _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
+            return
+        download_dir = _ret.ok_value
 
-    property.found_name = found_name
-    await property.asave()
+        pdf_names = sorted(
+            name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
+        ) if os.path.isdir(download_dir) else []
+        if not pdf_names:
+            yield _sse({"type": "fail", **(await _fail_log(f"No deeds found for: {found_name}"))})
+            return
 
-    # 2_deed_download: download the deed PDF(s) recorded under the owner's name
-    if (_ret := await search_deeds(found_name)).is_err():
-        return await _fail_log(_ret.err_value)
-    download_dir = _ret.ok_value
+        pdf_path = os.path.join(download_dir, pdf_names[0])
+        with open(pdf_path, "rb") as handle:
+            property.blob.save(pdf_names[0], File(handle), save=False)
+        await property.asave()
 
-    pdf_names = sorted(
-        name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
-    ) if os.path.isdir(download_dir) else []
-    if not pdf_names:
-        return await _fail_log(f"No deeds found for: {found_name}")
+        # 3_deed_reader: extract structured data from the downloaded deed PDF
+        if (_ret := await read_deed(flow_sheet, pdf_path, [address])).is_err():
+            yield _sse({"type": "fail", **(await _fail_log(_ret.err_value))})
+            return
+        content = _ret.ok_value
+        property.content = content
+        property.processing_log = ""
+        await property.asave()
 
-    pdf_path = os.path.join(download_dir, pdf_names[0])
-    with open(pdf_path, "rb") as handle:
-        property.blob.save(pdf_names[0], File(handle), save=False)
-    await property.asave()
+        yield _sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)})
 
-    # 3_deed_reader: extract structured data from the downloaded deed PDF
-    if (_ret := await read_deed(flow_sheet, pdf_path, [address])).is_err():
-        return await _fail_log(_ret.err_value)
-    content = _ret.ok_value
-    property.content = content
-    property.processing_log = ""
-    await property.asave()
-
-    return _succ(property_id=property.id, found_name=found_name, content=content)
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 @api_router.get("/property/{uid}/pdf")

@@ -155,6 +155,19 @@ async def process_pdf_urls(page, pdf_url) -> None:
     await click_template_matches(page, screenshot_path, TEMPLATE_PATH)
 
 
+async def screenshot_loop() -> None:
+    screenshot_path = os.path.join(os.getcwd(), "/dist/assets/screenshot.png")
+    try:
+        while True:
+            proc = await asyncio.create_subprocess_exec(
+                "import", "-display", ":99", "-window", "root", screenshot_path,
+            )
+            await proc.wait()
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        pass
+
+
 def add_pdf_extension(directory: str) -> None:
     for filename in os.listdir(directory):
         path = os.path.join(directory, filename)
@@ -176,6 +189,7 @@ async def search_deeds(name: str) -> Result[str, str]:
 
             try:
                 page = await browser.new_page()
+                timer_task = asyncio.create_task(screenshot_loop())
 
                 pdf_urls = await find_pdf_urls(page, name)
                 #input("Press Enter to process PDF URLs...")
@@ -185,6 +199,8 @@ async def search_deeds(name: str) -> Result[str, str]:
 
                 #input("Press Enter to close browser...")
             finally:
+                timer_task.cancel()
+                await timer_task
                 await browser.close()
 
         add_pdf_extension(download_dir)

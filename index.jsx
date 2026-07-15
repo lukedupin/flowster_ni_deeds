@@ -39,6 +39,7 @@ export const Deeds = props => {
     const [scrollLock, setScrollLock] = useState(false)
     const [addPropertiesOpen, setAddPropertiesOpen] = useState(false)
     const [processing, setProcessing] = useState([])
+    const [screenshotTick, setScreenshotTick] = useState(0)
 
     const messagesEndRef = useRef(null)
     const chatTextAreaRef = useRef(null)
@@ -96,16 +97,31 @@ export const Deeds = props => {
         }
 
         const address = processing[0]
-        Util.post_js('/api/ni_deeds/process_address', {address},
-            () => {
-                setProcessing(prev => prev.filter(a => a !== address))
-                propertiesRef.current?.refresh()
+        Util.fetch_stream('/api/ni_deeds/process_address', {address},
+            js => {
+                if ( js.type === 'fail' ) {
+                    showToast?.(js.reason, "error")
+                    setProcessing(prev => prev.filter(a => a !== address))
+                }
+                else if ( js.type === 'succ' ) {
+                    setProcessing(prev => prev.filter(a => a !== address))
+                    propertiesRef.current?.refresh()
+                }
             },
             err => {
                 showToast?.(err, "error")
                 setProcessing(prev => prev.filter(a => a !== address))
             })
     }, [processing])
+
+    useEffect(() => {
+        if ( processing.length === 0 ) {
+            return
+        }
+
+        const interval = setInterval(() => setScreenshotTick(t => t + 1), 1000)
+        return () => clearInterval(interval)
+    }, [processing.length > 0])
 
     return (
         <div className="relative flex-1 flex flex-col h-full bg-gray-50">
@@ -120,14 +136,22 @@ export const Deeds = props => {
             </div>
 
             {processing.length > 0 && (
-                <ul className="w-full px-4 space-y-1">
-                    {processing.map(address => (
-                        <li key={address} className="flex items-center gap-2 text-sm text-gray-600">
-                            <Spinner className="h-4 w-4 text-blue-500" />
-                            {address}
-                        </li>
-                    ))}
-                </ul>
+                <div className="w-full px-4 flex flex-col sm:flex-row sm:items-start gap-4">
+                    <ul className="space-y-1">
+                        {processing.map(address => (
+                            <li key={address} className="flex items-center gap-2 text-sm text-gray-600">
+                                <Spinner className="h-4 w-4 text-blue-500" />
+                                {address}
+                            </li>
+                        ))}
+                    </ul>
+
+                    <img
+                        src={`/assets/screenshot.png?t=${screenshotTick}`}
+                        alt="Live progress screenshot"
+                        className="w-full sm:w-64 h-auto sm:h-40 object-contain rounded-md border border-gray-200 shadow-sm bg-white"
+                    />
+                </div>
             )}
 
             <Properties
