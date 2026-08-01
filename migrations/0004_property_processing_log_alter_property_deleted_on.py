@@ -10,12 +10,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RemoveField(
+            model_name='property',
+            name="deleted_on"
+        ),
         migrations.AddField(
             model_name='property',
             name='processing_log',
             field=models.JSONField(blank=True, default=list),
         ),
-        migrations.AlterField(
+        migrations.AddField(
             model_name='property',
             name='deleted_on',
             field=models.DateTimeField(blank=True, db_index=True, null=True),
