@@ -9,7 +9,7 @@ class Owner(models.Model):
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
-    initial_address = models.CharField(max_length=255, unique=True)
+    initial_address = models.CharField(db_index=True, max_length=255, unique=True)
     found_name = models.CharField(unique=True, max_length=255, blank=True, null=True)
 
     timestamp_on = models.DateTimeField(auto_now_add=True)

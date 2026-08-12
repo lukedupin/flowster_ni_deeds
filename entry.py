@@ -16,7 +16,7 @@ import asyncio
 import json
 from flowster.core import util
 
-from ni_deeds.models import Property
+from ni_deeds.models import Property, Owner
 from ni_deeds.scrappers.resolve_address_name import resolve_owner_name
 from ni_deeds.scrappers.deed_download import search_deeds
 from ni_deeds.scrappers.deed_reader import read_deed
@@ -101,49 +101,57 @@ async def process_address(request: Request):
 
         flow_sheet = gen_flow_sheet(request.headers)
 
-        property = await Property.getOrCreate(address)
-
-        async def _fail_log(reason, **kwargs):
-            property.processing_log = reason
-            await property.asave()
-            return _fail(reason, **kwargs)
+        owner = await Owner.getOrCreate(address)
+        if owner is None:
+            return await done(_sse({"type": "fail", **_fail(f"Couldn't create owner for: {address}")}))
 
         # 1_resolve_address_name: find the property owner's name from the address
         if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
-            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
+            return await done(_sse({"type": "fail", **_fail(_ret.err_value)}))
         found_name = _ret.ok_value
         await progress_queue.put( f"Found name: {found_name}")
 
-        property.found_name = found_name
-        await property.asave()
+        owner.found_name = found_name
+        await owner.asave()
 
         # 2_deed_download: download the deed PDF(s) recorded under the owner's name
         if (_ret := await search_deeds(found_name, progress_queue)).is_err():
-            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
+            return await done(_sse({"type": "fail", **_fail(_ret.err_value)}))
         download_dir = _ret.ok_value
 
-        ############# Wrong shit AI code
         pdf_names = sorted(
             name for name in os.listdir(download_dir) if name.lower().endswith(".pdf")
         ) if os.path.isdir(download_dir) else []
         if not pdf_names:
-            return await done(_sse({"type": "fail", **(await _fail_log(f"No deeds found for: {found_name}"))}))
+            return await done(_sse({"type": "fail", **_fail(f"No deeds found for: {found_name}")}))
 
-        pdf_path = os.path.join(download_dir, pdf_names[0])
-        with open(pdf_path, "rb") as handle:
-            property.blob.save(pdf_names[0], File(handle), save=False)
-        await property.asave()
-        ##############
+        # 3_deed_reader: create a property per deed PDF found and extract its structured data
+        properties = []
+        for pdf_name in pdf_names:
+            property = await Property.objects.acreate(owner=owner)
 
-        # 3_deed_reader: extract structured data from the downloaded deed PDF
-        if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_err():
-            return await done(_sse({"type": "fail", **(await _fail_log(_ret.err_value))}))
-        content = _ret.ok_value
-        property.content = content
-        property.processing_log = ""
-        await property.asave()
+            pdf_path = os.path.join(download_dir, pdf_name)
+            with open(pdf_path, "rb") as handle:
+                property.blob.save(pdf_name, File(handle), save=False)
+            await property.asave()
 
-        return await done(_sse({"type": "succ", **_succ(property_id=property.id, found_name=found_name, content=content)}))
+            if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_err():
+                property.processing_log = _ret.err_value
+                await property.asave()
+                continue
+
+            property.content = _ret.ok_value
+            property.processing_log = ""
+            await property.asave()
+            properties.append(property)
+
+        if not properties:
+            return await done(_sse({"type": "fail", **_fail(f"Failed to process deeds for: {found_name}")}))
+
+        return await done(_sse({"type": "succ", **_succ(
+            found_name=found_name,
+            properties=[prop.toJson() for prop in properties],
+        )}))
     
     async def stream_with_progress():
         progress_queue = asyncio.Queue()
@@ -218,7 +226,10 @@ async def delete_property(uid: str):
 
 @api_router.get("/properties")
 async def list_properties():
-    properties = [prop.toJson() async for prop in Property.objects.filter(deleted_on__isnull=True).order_by('initial_address')]
+    properties = [
+        {**prop.toJson(), 'owner': prop.owner.toJson() if prop.owner else None}
+        async for prop in Property.objects.select_related('owner').filter(deleted_on__isnull=True).order_by('owner__initial_address')
+    ]
     return _succ(properties=properties)
 
 
@@ -233,7 +244,10 @@ async def property_chat(request: Request):
     flow_sheet = gen_flow_sheet(request.headers)
 
     search: str = request.query_params.get('search', '')
-    all_properties = [prop.toJson() async for prop in Property.objects.filter(deleted_on__isnull=True).order_by('initial_address')]
+    all_properties = [
+        {**prop.toJson(), 'owner': prop.owner.toJson() if prop.owner else None}
+        async for prop in Property.objects.select_related('owner').filter(deleted_on__isnull=True).order_by('owner__initial_address')
+    ]
     properties = [prop for prop in all_properties if _matches_search(prop, search)]
 
     if (_stream := await chat_stream(
