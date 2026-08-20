@@ -18,6 +18,7 @@ import json
 from flowster.core import util
 
 from ni_deeds.models import Property, Owner
+from ni_deeds import rate_calculator
 from ni_deeds.scrappers.resolve_address_name import resolve_owner_name
 from ni_deeds.scrappers.deed_download import search_deeds
 from ni_deeds.scrappers.deed_reader import read_deed
@@ -137,6 +138,11 @@ async def process_address(request: Request):
             pdf_path = os.path.join(download_dir, pdf_name)
             if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_ok():
                 property.content = _ret.ok_value
+
+                property.content['est_rate'] = None
+                if loan_date := property.content.get('loan_date'):
+                    if (_rate_ret := rate_calculator.get_rate(loan_date)).is_ok():
+                        property.content['est_rate'] = _rate_ret.ok_value
             else:
                 property.processing_log = _ret.err_value
 
@@ -232,6 +238,11 @@ async def list_properties():
         async for prop in Property.objects.select_related('owner').filter(deleted_on__isnull=True).order_by('owner__initial_address')
     ]
     return _succ(properties=properties)
+
+
+@api_router.get("/rates")
+async def get_all_rates():
+    return _succ(rates=rate_calculator.get_all_rates())
 
 
 @api_router.post("/chat")

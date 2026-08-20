@@ -14,7 +14,7 @@ STRUCTURE = {
     "owner": "the name of the property owner/grantee",
     "address": "The address of the property",
     "bank_name": "The name of the bank or lender",
-    "loan_date": "The date the loan was issued. Sometimes called security instrement date.",
+    "loan_date": "The date the loan was issued. Called made on or security instrument date. Format to MM-DD-YYYY",
     "riders": "List of the checked/X'ed rider boxes on the deed",
     "loan_amount": "The loan amount, if present on the deed, as a string",
     "rider_section_found": "True if the rider setion of checkboxes was found on this page",

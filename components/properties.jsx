@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { DocumentTextIcon } from "@heroicons/react/24/outline"
+import { ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline"
 import * as Util from "../../src/helpers/util.js"
 import { WEB_URL } from "../../src/settings"
 import { Sortable } from "../../src/components/sortable.jsx"
 import { PropertyDetailModal } from "./property_detail_modal.jsx"
+import { RatesModal } from "./rates_modal.jsx"
 
 const COLUMNS = [
     { key: 'found_name', label: 'Owner Name' },
     { key: 'initial_address', label: 'Address' },
     { key: 'amount', label: 'Amount' },
     { key: 'riders', label: 'Riders' },
+    { key: 'rate', label: 'Est Rate' },
     { key: 'timestamp_on', label: 'Created On' },
 ]
 
@@ -20,12 +22,16 @@ const formatRiders = riders => {
     return riders || ''
 }
 
+const formatRate = rate => (rate || rate === 0) ? `${rate}%` : ''
+
 const sortValue = (property, key) => {
     switch ( key ) {
         case 'amount':
             return property.content?.loan_amount || ''
         case 'riders':
             return formatRiders(property.content?.riders)
+        case 'rate':
+            return property.content?.loan_rate ?? ''
         default:
             return property[key] || ''
     }
@@ -54,6 +60,12 @@ export const Properties = React.forwardRef((props, ref) => {
     const [selected, setSelected] = useState(null)
     const [highlightedUid, setHighlightedUid] = useState(null)
     const [newUids, setNewUids] = useState(new Set())
+    const [ratesOpen, setRatesOpen] = useState(false)
+
+    const handleOpenRates = e => {
+        e.stopPropagation()
+        setRatesOpen(true)
+    }
 
     const loadProperties = () => {
         const wasHere = new Set(properties.map(p => p.uid))
@@ -117,6 +129,12 @@ export const Properties = React.forwardRef((props, ref) => {
                                 <span className="inline-flex items-center">
                                     {col.label}
                                     <Sortable show={sort.key === col.key} asc={sort.asc} />
+                                    {col.key === 'rate' && (
+                                        <ArrowTopRightOnSquareIcon
+                                            className="ml-1 h-3.5 w-3.5 text-gray-400 hover:text-blue-600"
+                                            onClick={handleOpenRates}
+                                        />
+                                    )}
                                 </span>
                             </th>
                         ))}
@@ -139,6 +157,7 @@ export const Properties = React.forwardRef((props, ref) => {
                             <td className="px-4 py-3 text-sm text-gray-900">{property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{formatRiders(property.content?.riders) || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.loan_rate) || '-'}</td>
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
                                 onClick={() => setSelected(property)}
@@ -168,6 +187,12 @@ export const Properties = React.forwardRef((props, ref) => {
                 onClose={() => setSelected(null)}
                 onDeleted={handleDeleted}
                 onUpdate={handlePropertyUpdate}
+                showToast={showToast}
+            />
+
+            <RatesModal
+                open={ratesOpen}
+                onClose={() => setRatesOpen(false)}
                 showToast={showToast}
             />
         </div>
