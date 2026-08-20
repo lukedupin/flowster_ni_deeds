@@ -10,7 +10,7 @@ class Owner(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     initial_address = models.CharField(db_index=True, max_length=255, unique=True)
-    found_name = models.CharField(unique=True, max_length=255, blank=True, null=True)
+    found_name = models.CharField(unique=True, max_length=255, blank=True)
 
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
@@ -76,7 +76,6 @@ class Property(models.Model):
 
     class Meta:
         app_label = 'ni_deeds'
-        unique_together = ('owner', 'deleted_on')
 
     def __str__(self):
         return self.owner.initial_address if self.owner else str(self.uid)
