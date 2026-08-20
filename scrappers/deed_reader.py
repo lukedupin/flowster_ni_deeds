@@ -86,7 +86,7 @@ async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: li
         'POSSIBLE_ADDRESSES': possible_addresses or [],
     }
 
-    for page_idx, page_name in enumerate(reversed(page_names)):
+    for page_idx, page_name in enumerate(page_names):
         if page_limit > 0 and page_idx >= page_limit:
             break
 
