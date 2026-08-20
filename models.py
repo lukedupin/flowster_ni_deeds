@@ -9,8 +9,8 @@ class Owner(models.Model):
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
-    initial_address = models.CharField(db_index=True, max_length=255, unique=True)
-    found_name = models.CharField(unique=True, max_length=255, blank=True)
+    initial_address = models.CharField(db_index=True, max_length=255)
+    found_name = models.CharField(db_index=True, unique=True, max_length=255, blank=True)
 
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
@@ -39,14 +39,14 @@ class Owner(models.Model):
             return None
 
     @staticmethod
-    async def getOrCreate(initial_address):
+    async def getOrCreate(found_name):
         try:
-            return await Owner.objects.aget(initial_address=initial_address)
+            return await Owner.objects.aget(found_name=found_name)
         except Owner.DoesNotExist:
             pass
 
         try:
-            return await Owner.objects.acreate(initial_address=initial_address)
+            return await Owner.objects.acreate(found_name=found_name)
         except IntegrityError:
             pass
 

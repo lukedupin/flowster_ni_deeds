@@ -102,17 +102,17 @@ async def process_address(request: Request):
 
         flow_sheet = gen_flow_sheet(request.headers)
 
-        owner = await Owner.getOrCreate(address)
-        if owner is None:
-            return await done(_sse({"type": "fail", **_fail(f"Couldn't create owner for: {address}")}))
-
         # 1_resolve_address_name: find the property owner's name from the address
         if (_ret := await resolve_owner_name(flow_sheet, address)).is_err():
             return await done(_sse({"type": "fail", **_fail(_ret.err_value)}))
         found_name = _ret.ok_value
         await progress_queue.put( f"Found name: {found_name}")
 
-        owner.found_name = found_name
+        owner = await Owner.getOrCreate(found_name)
+        if owner is None:
+            return await done(_sse({"type": "fail", **_fail(f"Couldn't create owner for: {found_name}")}))
+
+        owner.initial_address = address
         await owner.asave()
 
         # 2_deed_download: download the deed PDF(s) recorded under the owner's name
