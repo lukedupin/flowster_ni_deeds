@@ -1,5 +1,6 @@
 import os
 
+from asgiref.sync import sync_to_async
 from django.core.files import File
 from django.utils import timezone
 
@@ -132,19 +133,17 @@ async def process_address(request: Request):
         for pdf_name in pdf_names:
             property = Property(owner=owner)
 
+            # Read the dead, store the content or error
             pdf_path = os.path.join(download_dir, pdf_name)
+            if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_ok():
+                property.content = _ret.ok_value
+            else:
+                property.processing_log = _ret.err_value
+
+            # Save the blob!
             with open(pdf_path, "rb") as handle:
                 property.blob.save(pdf_name, File(handle), save=False)
-            await property.asave()
-
-            if (_ret := await read_deed(flow_sheet, pdf_path, [address], -1, progress_queue)).is_err():
-                property.processing_log = _ret.err_value
                 await property.asave()
-                continue
-
-            property.content = _ret.ok_value
-            property.processing_log = ""
-            await property.asave()
             properties.append(property)
 
         if not properties:
@@ -166,7 +165,7 @@ async def process_address(request: Request):
                 break
             if message is None:
                 break
-            print("FUCK", message)
+            #print("FUCK", message)
             yield _sse({"type": "progress", "message": message})
 
         yield await task

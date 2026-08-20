@@ -71,7 +71,8 @@ async def download_document(page, instruments: set, progress: asyncio.Queue | No
             await _progress(progress, "  Timed out waiting for ifrPDFWindow, closing and retrying...")
             await page.locator("img[alt='Close']").click()
     else:
-        raise RuntimeError("ifrPDFWindow never appeared after 3 attempts")
+        print("ifrPDFWindow never appeared after 3 attempts")
+        return None
 
     src = await iframe.locator("#ifrPDFWindow").get_attribute("src")
     await _progress(progress, f"  ifrPDFWindow src: {src}")
@@ -117,33 +118,53 @@ async def find_pdf_urls(page, name: str, progress: asyncio.Queue | None = None) 
     await _progress(progress, f"Detail page loaded: {page.url}")
 
     # Rewind to the starting document since we might be in the middle
-    for _ in range(100):
-        await asyncio.sleep(1)
-        prev_img = page.locator("#OptionsBar1_imgPrev")
-        if await prev_img.evaluate("el => el.hasAttribute('disabled')"):
-            break
+    try:
+        for _ in range(100):
+            await asyncio.sleep(1)
+            prev_img = page.locator("#OptionsBar1_imgPrev")
+            if await prev_img.evaluate("el => el.hasAttribute('disabled')"):
+                break
 
-        await prev_img.click()
-        await asyncio.sleep(2)
+            await prev_img.click()
+            await asyncio.sleep(2)
+
+    except PlaywrightTimeoutError as e:
+        print(f"Timed out searching deeds for {name}: {e}")
+    except Exception as e:
+        print(f"Failed to search deeds for {name}: {e}")
 
     instruments = set()
 
+    # Now we click through and save each file
     for _ in range(100):
-        pdf_url = await download_document(page, instruments, progress)
-        if pdf_url is not None:
-            pdf_urls.append(pdf_url)
+        try:
+            pdf_url = await download_document(page, instruments, progress)
+            if pdf_url is not None:
+                pdf_urls.append(pdf_url)
 
-        prev_img = page.locator("#OptionsBar1_imgNext")
-        is_disabled = await prev_img.evaluate("el => el.hasAttribute('disabled')")
-        if not is_disabled:
-            await asyncio.sleep(1)
-            await _progress(progress, "OptionsBar1_imgNext is enabled, looping back for next record...")
-            await prev_img.click()
-            await asyncio.sleep(2)
-            continue
+            prev_img = page.locator("#OptionsBar1_imgNext")
+            is_disabled = await prev_img.evaluate("el => el.hasAttribute('disabled')")
+            if not is_disabled:
+                await asyncio.sleep(1)
+                await _progress(progress, "OptionsBar1_imgNext is enabled, looping back for next record...")
+                await prev_img.click()
+                await asyncio.sleep(2)
+                continue
 
-        await _progress(progress, f"OptionsBar1_imgNext is disabled, found {len(pdf_urls)} PDF URLs.")
-        return pdf_urls
+            # We are done
+            await _progress(progress, f"OptionsBar1_imgNext is disabled, found {len(pdf_urls)} PDF URLs.")
+            break
+
+        except PlaywrightTimeoutError as e:
+            print(f"Timed out searching deeds for {name}: {e}")
+            await _progress(progress, "Looking for Close image...")
+            await page.locator("img[alt='Close']").click()
+        except Exception as e:
+            print(f"Failed to search deeds for {name}: {e}")
+            await _progress(progress, "Looking for Close image...")
+            await page.locator("img[alt='Close']").click()
+
+    return pdf_urls
 
 
 async def process_pdf_urls(page, pdf_url, progress: asyncio.Queue | None = None) -> None:

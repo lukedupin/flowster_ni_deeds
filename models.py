@@ -9,8 +9,8 @@ class Owner(models.Model):
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
-    initial_address = models.CharField(db_index=True, max_length=255)
-    found_name = models.CharField(max_length=255, blank=True, null=True)
+    initial_address = models.CharField(db_index=True, max_length=255, unique=True)
+    found_name = models.CharField(unique=True, max_length=255, blank=True)
 
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
@@ -69,17 +69,16 @@ class Property(models.Model):
 
     owner = models.ForeignKey(Owner, on_delete=models.SET_NULL, null=True, blank=True, related_name='properties')
 
-    blob = models.FileField(default=None, null=True, upload_to='ni_deeds/deeds/')
+    blob = models.FileField(upload_to='ni_deeds/deeds/')
     content = models.JSONField(blank=True, default=dict)
     notes = models.TextField(blank=True, default='')
     processing_log = models.TextField(blank=True, default='')
 
-    deleted_on = models.DateTimeField(null=True, blank=True, default=None, db_index=True)
+    deleted_on = models.DateTimeField(null=True, blank=True, db_index=True)
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         app_label = 'ni_deeds'
-        #unique_together = ('owner', 'deleted_on')
 
     def __str__(self):
         return self.owner.initial_address if self.owner else str(self.uid)
