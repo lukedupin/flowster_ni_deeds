@@ -14,9 +14,11 @@ STRUCTURE = {
     "owner": "the name of the property owner/grantee",
     "address": "The address of the property",
     "bank_name": "The name of the bank or lender",
+    "loan_date": "The date the loan was issued. Sometimes called security instrement date.",
     "riders": "List of the checked/X'ed rider boxes on the deed",
     "loan_amount": "The loan amount, if present on the deed, as a string",
-    "rider_section_found": "True if the rider setion of checkboxes was found on this page"
+    "rider_section_found": "True if the rider setion of checkboxes was found on this page",
+    "fha_loan": "Does this reference Federal Housing Administration (FHA) loan?",
 }
 
 SYSTEM_PROMPT = """You are reading a single page of a scanned property deed.
@@ -84,11 +86,11 @@ async def read_deed(flow_sheet: FlowSheet, pdf_path: str, possible_addresses: li
         'POSSIBLE_ADDRESSES': possible_addresses or [],
     }
 
-    for page_idx, page_name in enumerate(page_names):
+    for page_idx, page_name in enumerate(reversed(page_names)):
         if page_limit > 0 and page_idx >= page_limit:
             break
 
-        await _progress(progress, f"Processing {page_name}...")
+        await _progress(progress, f"Processing {page_limit + 1} of {len(page_names)} {page_name}...")
         try:
             image = image_to_base64(os.path.join(work_dir, page_name))
         except OSError as e:
@@ -122,6 +124,10 @@ If no riders are found, prefer null riders.""",
                 if util.xbool(v) and 'rider_page' not in memory:
                     memory['rider_section_found'] = True
                     memory['rider_page'] = page_name
+            if k == "fha_loan":
+                if util.xbool(v) and 'fha_page' not in memory:
+                    memory['fha_loan'] = True
+                    memory['fha_page'] = page_name
             elif v is not None:
                 memory[k] = v
         await _progress(progress, f"  {page_name}: memory now {memory}")

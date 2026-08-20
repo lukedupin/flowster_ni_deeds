@@ -9,8 +9,8 @@ class Owner(models.Model):
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
-    initial_address = models.CharField(db_index=True, max_length=255, unique=True)
-    found_name = models.CharField(unique=True, max_length=255, blank=True, null=True)
+    initial_address = models.CharField(db_index=True, max_length=255)
+    found_name = models.CharField(max_length=255, blank=True, null=True)
 
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
@@ -20,13 +20,16 @@ class Owner(models.Model):
     def __str__(self):
         return self.initial_address
 
-    def toJson(self):
-        return {
-            'uid': str(self.uid),
+    def toJson(self, chat_js=False):
+        js = {
             'initial_address': self.initial_address,
             'found_name': self.found_name,
-            'timestamp_on': self.timestamp_on.isoformat() if self.timestamp_on else None,
         }
+        if not chat_js:
+            js['uid'] = str(self.uid)
+            js['timestamp_on'] = self.timestamp_on.isoformat() if self.timestamp_on else None
+
+        return js
 
     @staticmethod
     async def getByUid(uid):
@@ -66,32 +69,35 @@ class Property(models.Model):
 
     owner = models.ForeignKey(Owner, on_delete=models.SET_NULL, null=True, blank=True, related_name='properties')
 
-    blob = models.FileField(upload_to='ni_deeds/deeds/')
+    blob = models.FileField(default=None, null=True, upload_to='ni_deeds/deeds/')
     content = models.JSONField(blank=True, default=dict)
     notes = models.TextField(blank=True, default='')
     processing_log = models.TextField(blank=True, default='')
 
-    deleted_on = models.DateTimeField(null=True, blank=True, db_index=True)
+    deleted_on = models.DateTimeField(null=True, blank=True, default=None, db_index=True)
     timestamp_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         app_label = 'ni_deeds'
-        unique_together = ('owner', 'deleted_on')
+        #unique_together = ('owner', 'deleted_on')
 
     def __str__(self):
         return self.owner.initial_address if self.owner else str(self.uid)
 
-    def toJson(self):
-        return {
-            'uid': str(self.uid),
+    def toJson(self, chat_js=False):
+        js = {
             'initial_address': self.owner.initial_address if self.owner else None,
             'found_name': self.owner.found_name if self.owner else None,
             'content': self.content,
             'notes': self.notes,
             'processing_log': self.processing_log,
-            'deleted_on': self.deleted_on.isoformat() if self.deleted_on else None,
-            'timestamp_on': self.timestamp_on.isoformat() if self.timestamp_on else None,
         }
+        if not chat_js:
+            js['uid'] = str(self.uid)
+            js['deleted_on'] = self.deleted_on.isoformat() if self.deleted_on else None
+            js['timestamp_on'] = self.timestamp_on.isoformat() if self.timestamp_on else None
+
+        return js
 
     @staticmethod
     async def getByUid(uid):

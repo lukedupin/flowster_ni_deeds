@@ -125,10 +125,12 @@ async def process_address(request: Request):
         if not pdf_names:
             return await done(_sse({"type": "fail", **_fail(f"No deeds found for: {found_name}")}))
 
+        print(pdf_names)
+
         # 3_deed_reader: create a property per deed PDF found and extract its structured data
         properties = []
         for pdf_name in pdf_names:
-            property = await Property.objects.acreate(owner=owner)
+            property = Property(owner=owner)
 
             pdf_path = os.path.join(download_dir, pdf_name)
             with open(pdf_path, "rb") as handle:
@@ -245,7 +247,7 @@ async def property_chat(request: Request):
 
     search: str = request.query_params.get('search', '')
     all_properties = [
-        {**prop.toJson(), 'owner': prop.owner.toJson() if prop.owner else None}
+        {**prop.toJson(chat_js=True), 'owner': prop.owner.toJson(chat_js=True) if prop.owner else None}
         async for prop in Property.objects.select_related('owner').filter(deleted_on__isnull=True).order_by('owner__initial_address')
     ]
     properties = [prop for prop in all_properties if _matches_search(prop, search)]

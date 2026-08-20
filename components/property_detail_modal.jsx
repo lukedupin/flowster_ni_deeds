@@ -76,6 +76,14 @@ export const PropertyDetailModal = props => {
             })
     }
 
+    const handleCopyAddress = () => {
+        navigator.clipboard.writeText(property.initial_address || '').then(() => {
+            showToast?.('Address copied to clipboard', 'success')
+        }).catch(err => {
+            showToast?.(String(err), 'error')
+        })
+    }
+
     const handleNotesBlur = () => {
         if ( notes === (property?.notes || '') ) {
             return
@@ -140,8 +148,8 @@ export const PropertyDetailModal = props => {
                                                 </div>
                                             )}
 
-                                            <div className="max-h-[60vh] overflow-y-auto">
-                                                <MarkdownViewer content={buildMarkdown(property)} showToast={showToast} />
+                                            <div className="max-h-[60vh] overflow-y-auto cursor-pointer">
+                                                <MarkdownViewer content={buildMarkdown(property)} showToast={showToast} onClick={handleCopyAddress} />
                                             </div>
 
                                             <textarea

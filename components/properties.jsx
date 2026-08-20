@@ -53,10 +53,15 @@ export const Properties = React.forwardRef((props, ref) => {
     const [sort, setSort] = useState({ key: 'initial_address', asc: true })
     const [selected, setSelected] = useState(null)
     const [highlightedUid, setHighlightedUid] = useState(null)
+    const [newUids, setNewUids] = useState(new Set())
 
     const loadProperties = () => {
+        const wasHere = new Set(properties.map(p => p.uid))
         Util.post_js(`${WEB_URL}/api/ni_deeds/properties`, null,
-            js => setProperties(js.properties),
+            js => {
+                setProperties(js.properties)
+                setNewUids(new Set(js.properties.filter(p => !wasHere.has(p.uid)).map(p => p.uid)))
+            },
             err => showToast?.(err, "error"))
     }
 
@@ -123,7 +128,7 @@ export const Properties = React.forwardRef((props, ref) => {
                         <tr
                             key={property.uid}
                             onClick={() => setHighlightedUid(property.uid)}
-                            className={`hover:bg-gray-50 ${highlightedUid === property.uid ? 'bg-blue-50' : ''}`}
+                            className={`hover:bg-gray-50 ${highlightedUid === property.uid ? 'bg-blue-50' : newUids.has(property.uid) ? 'bg-amber-50' : ''}`}
                         >
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
