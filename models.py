@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models, IntegrityError
 from django.contrib import admin
+import re
 import uuid
 
 
@@ -39,7 +40,15 @@ class Owner(models.Model):
             return None
 
     @staticmethod
+    def clean_found_name(found_name):
+        cleaned = re.sub(r'[^A-Za-z0-9\s]', '', found_name or '')
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned.title()
+
+    @staticmethod
     async def getOrCreate(found_name):
+        found_name = Owner.clean_found_name(found_name)
+
         try:
             return await Owner.objects.aget(found_name=found_name)
         except Owner.DoesNotExist:
