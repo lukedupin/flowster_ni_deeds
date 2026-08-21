@@ -39,8 +39,8 @@ def get_all_rates():
     return results
 
 
-def get_rate(date_str) -> Result[float, str]:
-    """Parses date_str as loosely as possible and returns the rate for the closest observation date."""
+def get_rate(date_str, max_days=90) -> Result[float, str]:
+    """Parses date_str as loosely as possible and returns the rate for the closest observation date within max_days."""
     try:
         target = date_parser.parse(date_str, fuzzy=True).date()
     except (date_parser.ParserError, ValueError, OverflowError, TypeError):
@@ -51,4 +51,7 @@ def get_rate(date_str) -> Result[float, str]:
         return Err("No rate data available")
 
     closest_date, closest_rate = min(rows, key=lambda row: abs((row[0] - target).days))
+    if abs((closest_date - target).days) > max_days:
+        return Err(f"No rate found within {max_days} days of {target}")
+
     return Ok(closest_rate)
