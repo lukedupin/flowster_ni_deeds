@@ -31,7 +31,7 @@ const sortValue = (property, key) => {
         case 'riders':
             return formatRiders(property.content?.riders)
         case 'est_rate':
-            return property.content?.loan_rate ?? ''
+            return property.content?.est_rate ?? ''
         default:
             return property[key] || ''
     }
@@ -157,7 +157,7 @@ export const Properties = React.forwardRef((props, ref) => {
                             <td className="px-4 py-3 text-sm text-gray-900">{property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{formatRiders(property.content?.riders) || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.loan_rate) || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.est_rate) || '-'}</td>
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
                                 onClick={() => setSelected(property)}
