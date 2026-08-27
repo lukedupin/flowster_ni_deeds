@@ -154,7 +154,7 @@ export const Properties = React.forwardRef((props, ref) => {
                             >
                                 {property.found_name || '-'}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{property.initial_address}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{property.content?.address || property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{formatRiders(property.content?.riders) || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.loan_rate) || '-'}</td>
