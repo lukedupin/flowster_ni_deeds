@@ -7,7 +7,7 @@ import { ConfirmModal } from "../../src/modals/confirm_modal.jsx"
 import * as Util from "../../src/helpers/util.js"
 import { WEB_URL } from "../../src/settings"
 
-const EXCLUDED_CONTENT_KEYS = ['owner', 'address', 'loan_amount', 'riders']
+const EXCLUDED_CONTENT_KEYS = ['owner', 'loan_amount', 'riders']
 
 const formatValue = value => {
     if ( value === null || value === undefined || value === '' ) {

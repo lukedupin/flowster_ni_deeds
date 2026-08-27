@@ -11,7 +11,7 @@ const COLUMNS = [
     { key: 'initial_address', label: 'Address' },
     { key: 'amount', label: 'Amount' },
     { key: 'riders', label: 'Riders' },
-    { key: 'rate', label: 'Est Rate' },
+    { key: 'est_rate', label: 'Est Rate' },
     { key: 'timestamp_on', label: 'Created On' },
 ]
 
@@ -30,8 +30,8 @@ const sortValue = (property, key) => {
             return property.content?.loan_amount || ''
         case 'riders':
             return formatRiders(property.content?.riders)
-        case 'rate':
-            return property.content?.loan_rate ?? ''
+        case 'est_rate':
+            return property.content?.est_rate ?? ''
         default:
             return property[key] || ''
     }
@@ -129,7 +129,7 @@ export const Properties = React.forwardRef((props, ref) => {
                                 <span className="inline-flex items-center">
                                     {col.label}
                                     <Sortable show={sort.key === col.key} asc={sort.asc} />
-                                    {col.key === 'rate' && (
+                                    {col.key === 'est_rate' && (
                                         <ArrowTopRightOnSquareIcon
                                             className="ml-1 h-3.5 w-3.5 text-gray-400 hover:text-blue-600"
                                             onClick={handleOpenRates}
@@ -157,7 +157,7 @@ export const Properties = React.forwardRef((props, ref) => {
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.address || property.initial_address}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{property.content?.loan_amount || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{formatRiders(property.content?.riders) || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.loan_rate) || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatRate(property.content?.est_rate) || '-'}</td>
                             <td
                                 className="cursor-pointer px-4 py-3 text-sm text-gray-900 hover:underline"
                                 onClick={() => setSelected(property)}
